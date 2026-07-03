@@ -6,7 +6,7 @@ A Padding Oracle exploitation script in Python because I love PadBuster, but I a
 ## Requirements
  - h2spacex
  - requests
-## Setup
+## Installation
 ```
 pip install h2spacex
 pip install requests
