@@ -11,8 +11,8 @@ A Padding Oracle exploitation script in Python because I love PadBuster, but I a
  - Standard detection methods: HTTP status code, response length, keyword searches, location header
  - Advanced detection methods: HTTP/1.1 and HTTP/2 Time-based detection mechanisms for semi-blind padding oracles 
 ## Requirements
- - h2spacex HTTP/2 low level library based on Scapy which can be used for Single Packet Attack (Race Condition on H2) https://github.com/nxenon/h2spacex
- - requests HTTP for Humans™ https://requests.readthedocs.io/en/latest/
+ - h2spacex - HTTP/2 low level library based on Scapy which can be used for Single Packet Attack (Race Condition on H2) https://github.com/nxenon/h2spacex
+ - requests - HTTP for Humans™ https://requests.readthedocs.io/en/latest/
 ## Installation
 ```
 pip install h2spacex
