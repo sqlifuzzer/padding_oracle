@@ -20,22 +20,49 @@ pip install requests
 ```
 ## Usage
 ```
-usage: orca.py
-REQUIRED ARGUMENTS:
-url                   e.g. https://example.com:8081/page.aspx
-ciphertext            e.g. /LA0Us7iIXaxTid25gdlIePo8MHYgeBexPGCByF5R8SnrJ4KdTXl/I5SdHQnIS/K2MpuZ+oYBxvnLY5UuAqDDA==
-encoding              base64, None
-method                GET, POST
-blocksize             e.g. 8, 16, 32
-body                  e.g. foo=bar&msg=/LA0Us7iIXaxTid25gdlIePo8MHYgeBexPGCByF5R8SnrJ4KdTXl/I5SdHQnIS/K2MpuZ+oYBxvnLY5UuAqDDA==
+usage: orca.py [-h] [--headers HEADERS] [--keyword KEYWORD] [--noiv NOIV] [--lengthvariation LENGTHVARIATION]
+               [--allow302redirects ALLOW302REDIRECTS] [--protocol PROTOCOL] [--repeatruns REPEATRUNS]
+               [--delayiftimebased DELAYIFTIMEBASED] [--http2groupsize HTTP2GROUPSIZE]
+               url ciphertext encoding method blocksize body
 
-OPTIONAL ARGUMENTS:
---headers             {'Cookie': 'foo'} Note: Content-Type: application/x-www-form-urlencoded headers are added for POST method
---keyword             A custom, case-insensitive, keyword to search responses for 
---noiv                Activate 'no IV mode'
---lengthvariation     Make response length checking a fuzzy match
---protocol            HTTP1 / HTTP2 (time-based only)
---repeatruns          e.g. 1 / 2 / 4 / 8 (time-based only, HTTP/1 only)
---delayiftimebased    Add a delay to HTTP1 time-based attack (time-based only, HTTP/1 only)
---groupsize           e.g. 4 / 8 / 16 - Number of requests in each SPA (time-based only, HTTP/2 only)
+A Padding Oracle exploitation toolkit in python.
+
+positional arguments:
+  url                   Target URL - examples https://example.com:8081/page.aspx, http://example.com,
+                        https://127.0.0.1:8080
+  ciphertext            The ciphertext to attack - can be base64 encoded or a string of hex bytes. Provide a URL-
+                        decoded version. URL-encoding will be applied on output.
+  encoding              base64 / None
+  method                GET / POST
+  blocksize             8 / 16 / etc
+  body                  This is the POST body OR the GET query - it will have all the parameter names and values
+                        needed for the request and the ciphertext must match the provided ciphertext. A JSON body can
+                        also be provided.
+
+options:
+  -h, --help            show this help message and exit
+  --headers HEADERS     Dictionary format: {'Cookie': '123561762351635'} - Note: Content-Type: application/x-www-form-
+                        urlencoded OR application/json headers are auto-added for POST method.
+  --keyword KEYWORD     A custom keyword to search responses for.
+  --noiv NOIV           e.g. True - Activate 'no IV mode'.
+  --lengthvariation LENGTHVARIATION
+                        e.g. 20 / 30 / 40 Provide a number of bytes for the detection engine to ignore when the
+                        content length varies. Set to 99999 to disable length checking altogether.
+  --allow302redirects ALLOW302REDIRECTS
+                        e.g. True / False. The requests engine will allow redirects by default, but you can disable
+                        them by passing this flag. (HTTP1 only)
+  --protocol PROTOCOL   HTTP1 / HTTP2 (Time-based only). This selects between the two time comparison engines. HTTP1
+                        is a simple, orthodox response time comparison based detection engine, while HTTP2 is a Single
+                        Packet Attack base advanced timing engine.
+  --repeatruns REPEATRUNS
+                        e.g. 1 / 2 / 4 / 8 (Time-based only, HTTP/1 only). How many times to repeat the measurement
+                        for each byte. The HTTP1 engine can perform multiple scans and average the time difference
+                        over these. Increases accuracy, but increases scan time also.
+  --delayiftimebased DELAYIFTIMEBASED
+                        Add a delay to HTTP1 time-based attack. (Time-based only, HTTP/1 only). Increases accuracy,
+                        but increases scan time also.
+  --http2groupsize HTTP2GROUPSIZE
+                        e.g. 4 / 8 / 16 - Number of requests to include in each SPA. (Time-based only, HTTP/2 only).
+                        Sets the number of requests to send per SPA. 4 is the mose accurate, but will also take the
+                        longest.
 ```
